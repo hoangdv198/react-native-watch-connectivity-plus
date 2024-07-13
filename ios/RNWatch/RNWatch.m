@@ -159,14 +159,17 @@ RCT_EXPORT_METHOD(transferCurrentComplicationUserInfo:
 // Reachability
 ////////////////////////////////////////////////////////////////////////////////
 
+// Export the getReachability method to be accessible from React Native
 RCT_EXPORT_METHOD(getReachability:
-    (RCTPromiseResolveBlock) resolve
+    (RCTPromiseResolveBlock) resolve // Block to call on success
             reject:
-            (RCTPromiseRejectBlock) reject) {
+            (RCTPromiseRejectBlock) reject) { // Block to call on failure
+    // Resolve the promise with the reachability status of the session
+    // self.session.reachable returns YES if the device can reach the Apple Watch, otherwise NO
     resolve(@(self.session.reachable));
 }
 
-////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////
 
 - (void)sessionReachabilityDidChange:(WCSession *)session {
     BOOL reachable = session.reachable;
@@ -177,10 +180,13 @@ RCT_EXPORT_METHOD(getReachability:
 // isPaired
 ////////////////////////////////////////////////////////////////////////////////
 
+// Export the getIsPaired method to be accessible from React Native
 RCT_EXPORT_METHOD(getIsPaired:
-    (RCTPromiseResolveBlock) resolve
+    (RCTPromiseResolveBlock) resolve // Block to call on success
             reject:
-            (RCTPromiseRejectBlock) reject) {
+            (RCTPromiseRejectBlock) reject) { // Block to call on failure
+    // Resolve the promise with the pairing status of the session
+    // self.session.isPaired returns YES if the Apple Watch is paired, otherwise NO
     resolve(@(self.session.isPaired));
 }
 
@@ -236,23 +242,39 @@ RCT_EXPORT_METHOD(replyToMessageWithId:
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-- (void)  session:(WCSession *)session
+// Phương thức này được gọi khi nhận tin nhắn từ Apple Watch không yêu cầu phản hồi
+- (void)session:(WCSession *)session
 didReceiveMessage:(NSDictionary<NSString *, id> *)message {
+    // Ghi nhật ký tin nhắn nhận được
+    RCTLogInfo(@"RCTLogInfo didReceiveMessage: %@", message);
+    
+    // Gửi sự kiện tới JavaScript với tên sự kiện và nội dung tin nhắn
     [self dispatchEventWithName:EVENT_RECEIVE_MESSAGE body:message];
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-- (void)  session:(WCSession *)session
+// Phương thức này được gọi khi nhận tin nhắn từ Apple Watch yêu cầu phản hồi
+- (void)session:(WCSession *)session
 didReceiveMessage:(NSDictionary<NSString *, id> *)message
      replyHandler:(void (^)(NSDictionary<NSString *, id> *_Nonnull))replyHandler {
+    // Ghi nhật ký tin nhắn nhận được
+    RCTLogInfo(@"RCTLogInfo didReceiveMessage: %@", message);
+    
+    // Tạo một ID duy nhất cho tin nhắn để nhận diện
     NSString *messageId = uuid();
+    
+    // Tạo một bản sao có thể thay đổi của tin nhắn nhận được
     NSMutableDictionary *mutableMessage = [message mutableCopy];
+    
+    // Thêm ID duy nhất vào tin nhắn
     mutableMessage[@"id"] = messageId;
+    
+    // Lưu replyHandler vào từ điển với khóa là ID duy nhất
+    // Điều này cho phép gọi lại replyHandler sau khi xử lý tin nhắn trong JavaScript
     [self.replyHandlers setObject:replyHandler forKey:messageId];
     
+    // Gửi sự kiện tới JavaScript với tên sự kiện và nội dung tin nhắn có ID duy nhất
     [self dispatchEventWithName:EVENT_RECEIVE_MESSAGE body:mutableMessage];
 }
 
@@ -384,23 +406,33 @@ RCT_EXPORT_METHOD(dequeueFile:
     }
 }
 
+// This method creates and returns a FileTransferEvent object based on the provided WCSessionFileTransfer object
 - (FileTransferEvent *)getFileTransferEvent:(WCSessionFileTransfer *)transfer {
+    // Retrieve the unique identifier from the transfer file's metadata
     NSString *uuid = transfer.file.metadata[@"id"];
 
+    // Get the corresponding FileTransferInfo object using the unique identifier
     FileTransferInfo *transferInfo = self.fileTransfers[uuid];
 
+    // Get the number of bytes that have been transferred so far
     NSNumber *_Nonnull completedUnitCount = @(transfer.progress.completedUnitCount);
 
+    // Get the estimated time remaining for the file transfer (optional)
     NS_REFINED_FOR_SWIFT NSNumber *estimatedTimeRemaining = transfer.progress.estimatedTimeRemaining;
 
+    // Get the fraction of the transfer that has been completed
     NSNumber *_Nonnull fractionCompleted = @(transfer.progress.fractionCompleted);
 
+    // Get the throughput of the transfer (optional)
     NS_REFINED_FOR_SWIFT NSNumber *throughput = transfer.progress.throughput;
 
+    // Get the total number of bytes to be transferred
     NSNumber *_Nonnull totalUnitCount = @(transfer.progress.totalUnitCount);
 
+    // Create a new FileTransferEvent object with the transfer information
     FileTransferEvent *event = [[FileTransferEvent alloc] initWithTransferInfo:transferInfo];
 
+    // Set the various properties of the event based on the transfer progress
     event.bytesTransferred = completedUnitCount;
     event.estimatedTimeRemaining = estimatedTimeRemaining;
     event.id = uuid;
@@ -408,8 +440,10 @@ RCT_EXPORT_METHOD(dequeueFile:
     event.throughput = throughput;
     event.bytesTotal = totalUnitCount;
 
+    // Return the created event
     return event;
 }
+
 
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey, id> *)change context:(void *)context {
     if ([keyPath hasPrefix:@"progress"]) {
@@ -461,7 +495,7 @@ RCT_EXPORT_METHOD(dequeueFile:
 didFinishFileTransfer:(WCSessionFileTransfer *)fileTransfer
                 error:(NSError *)error {
     double endTime = jsTimestamp();
-
+    RCTLogInfo(@"RCTLogInfo didFinishFileTransfer: %@", endTime);
     WCSessionFile *file = fileTransfer.file;
     NSDictionary<NSString *, id> *metadata = file.metadata;
     NSString *transferId = metadata[@"id"];
